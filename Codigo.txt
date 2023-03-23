@@ -1,0 +1,86 @@
+#include <Arduino.h>
+#include <WiFi.h>
+#include <Firebase_ESP_Client.h>
+//administra el proceso para generar tokens
+#include <addons/TokenHelper.h>
+//Proporciona metodos para imprimir datos
+#include <addons/RTDBHelper.h>
+
+//Proporcionamos las credenciales de conexión
+#define WIFI_SSID "DIT-IoT"
+#define WIFI_CLAVE "DITCisco98"
+//Indica la API KEY (Se obitne de firebase)
+#define API_KEY "AIzaSyCUk9mGLxo3y2NrAlIVNqFQ7YR7kWwl5dc"
+//Proporcionamos la URL de la BD de realtime
+#define URL_DB "https://hotel-de-moo-estrella-default-rtdb.firebaseio.com"
+//Definimos 3 objetos claves para nuestra conexión
+FirebaseData datos; //Objeto de datos de firebase
+FirebaseAuth autenticacion; //datos de autenticación
+FirebaseConfig configuracion; //datos de configuración
+
+unsigned long tiempo_transcurrido = 0;
+bool autenticado = false;
+
+void conectarWifi(){
+  WiFi.begin(WIFI_SSID, WIFI_CLAVE);
+  Serial.print("Conectado a la red");
+  while (WiFi.status()!= WL_CONNECTED){
+    Serial.print("...");
+    delay(300);
+  }
+Serial.println();
+Serial.print("Conectado exitosamente / IP: ");
+Serial.println(WiFi.localIP());
+}
+
+void iniciarFirebase(){
+  //Asignamos a configuración la API key
+  configuracion.api_key = API_KEY;
+  //Asignamos la URL de firebase
+  configuracion.database_url = URL_DB;
+  //Activamos ña reconexión del WiFi
+  Firebase.reconnectWiFi(true);
+  Serial.println("Nuevo usuario autenticándose... ");
+  //verificamos la autentuicación anónima
+if (Firebase.signUp(&configuracion,&autenticacion, "", "")){
+  Serial.println("Usuario autenticado correctamente");
+  autenticado = true;
+}else{
+  Serial.printf("&s\n",configuracion.signer.signupError.message.c_str());
+  autenticado = false;
+}
+//generacion de token
+configuracion.token_status_callback = tokenStatusCallback;
+//Inicializa firebase con las confiduraciones realizadas
+Firebase.begin(&configuracion, &autenticacion);
+}
+
+void insertDatos(){
+  if(millis()-tiempo_transcurrido > 10000 && autenticado && Firebase.ready()){
+    tiempo_transcurrido = millis();
+
+    //String path = auth.token.uid.c_str();
+
+    String ruta = "Planta1/humedad";
+
+    if (Firebase.RTDB.setInt(&datos, ruta, 1)){
+      Serial.println("Dato Actualizado");    
+      Serial.println("RUTA: " + datos.dataPath());
+      Serial.println("TIPO: " + datos.dataType());
+      Serial.println("VALOR ");
+      printResult (datos);
+      } else {
+        Serial.println(datos.errorReason().c_str());
+      }
+  }
+}
+
+void setup(){
+  Serial.begin(115200);
+  conectarWifi();
+  iniciarFirebase();
+}
+
+void loop(){
+  insertDatos();
+}
